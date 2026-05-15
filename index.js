@@ -122,23 +122,33 @@ client.on("messageCreate", async (message) => {
           const logChannel = message.guild.channels.cache.find(ch => ch.name === "ticket-logs");
           if (logChannel) {
             const ticketNumber = message.channel.name.replace("🌸", "");
-            await logChannel.send(`**Ticket logs for ${ticketNumber}**\n\`\`\`\n${logs}\n\`\`\``);
+            await logChannel.send(`**Ticket logs for ${ticketNumber}**`);
+
+            // Split into chunks under 2000 chars
+            const chunks = logs.match(/[\s\S]{1,1900}/g) || [];
+            for (const chunk of chunks) {
+              await logChannel.send(`\`\`\`\n${chunk}\n\`\`\``);
+            }
           }
 
           await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
           setTimeout(() => message.channel.delete().catch(console.error), 3000);
         } catch (err) {
           console.error("Error closing ticket:", err);
-          message.reply("❌ Failed to close the ticket.");
+          message.reply("❌ Failed to close the ticket. Check bot permissions and message size.");
         }
       } else {
         message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
       }
     }
   }
-
   // Mark management
   if (command === "!mark" && args[1] === "management") {
+    // Restriction check first
+    if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
+      return message.reply("⛔ You are restricted from using ticket commands in this channel!!");
+    }
+
     if (!message.channel.name.startsWith("ticket-") && !message.channel.name.startsWith("🌸ticket-")) {
       return message.reply("⚠️ You can only use this inside a ticket channel.");
     }
@@ -188,4 +198,3 @@ client.on("messageCreate", async (message) => {
 });
 
 client.login(TOKEN);
-
