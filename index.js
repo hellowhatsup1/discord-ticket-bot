@@ -153,7 +153,7 @@ client.on("messageCreate", async (message) => {
       }
     }
   }
-  // Mark management
+   // Mark management
   if (command === "!mark" && args[1] === "management") {
     // Restriction check first
     if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
@@ -182,6 +182,7 @@ client.on("messageCreate", async (message) => {
       { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
     ];
 
+    // Allow only management roles above bot
     message.guild.roles.cache.forEach(role => {
       if (role.position > botRole.position) {
         permissionOverwrites.push({ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
@@ -202,7 +203,18 @@ client.on("messageCreate", async (message) => {
     } catch (err) {
       console.error("Failed to DM user:", err);
     }
+
+    // ✅ If user is NOT management, remove their access
+    const isManagement = MANAGEMENT_ROLE_IDS.some(r => message.member.roles.cache.has(r));
+    if (!isManagement) {
+      await message.channel.permissionOverwrites.edit(message.author.id, {
+        ViewChannel: false,
+        SendMessages: false
+      });
+    }
   }
 });
+
+client.login(TOKEN);
 
 client.login(TOKEN);
