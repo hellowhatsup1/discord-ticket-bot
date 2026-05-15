@@ -6,10 +6,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => res.send("Bot is alive!"));
-app.get("/status", (req, res) => {
-  const botStatus = client.user ? `Logged in as ${client.user.tag}` : "Bot not logged in";
-  res.json({ status: "ok", bot: botStatus, uptime: process.uptime().toFixed(0) + "s" });
-});
 app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 
 const client = new Client({
@@ -41,29 +37,29 @@ client.on("messageCreate", async (message) => {
   // Restrict
   if (command === "!restrict") {
     const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-    if (!hasStaffRole) return message.reply("❌ You don’t have permission.");
+    if (!hasStaffRole) return message.reply("❌ You don’t have permission to restrict users.");
     const target = message.mentions.users.first();
-    if (!target) return message.reply("⚠️ Mention a user.");
+    if (!target) return message.reply("⚠️ Please mention a user.");
     if (!channelRestrictions.has(message.channel.id)) channelRestrictions.set(message.channel.id, new Set());
     channelRestrictions.get(message.channel.id).add(target.id);
-    return message.reply(`⛔ ${target.tag} restricted in this channel.`);
+    return message.reply(`⛔ ${target} is restricted from using any ticket commands inside this channel!!`);
   }
 
   // Unrestrict
   if (command === "!unrestrict") {
     const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-    if (!hasStaffRole) return message.reply("❌ You don’t have permission.");
+    if (!hasStaffRole) return message.reply("❌ You don’t have permission to unrestrict users.");
     const target = message.mentions.users.first();
-    if (!target) return message.reply("⚠️ Mention a user.");
+    if (!target) return message.reply("⚠️ Please mention a user.");
     if (target.id === message.author.id) return message.reply("⛔ You cannot unrestrict yourself.");
     if (channelRestrictions.has(message.channel.id)) channelRestrictions.get(message.channel.id).delete(target.id);
-    return message.reply(`✅ ${target.tag} unrestricted in this channel.`);
+    return message.reply(`✅ ${target} is no longer restricted in this channel.`);
   }
 
   // Block restricted
-  if (command.startsWith("!ticket")) {
+  if (command.startsWith("!ticket") || command === "!mark") {
     if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
-      return message.reply("⛔ You are restricted from ticket commands here.");
+      return message.reply("⛔ You are restricted from using ticket commands in this channel!!");
     }
   }
 
@@ -75,21 +71,18 @@ client.on("messageCreate", async (message) => {
     // Open
     if (subCommand === "open") {
       try {
-        const existingTicket = message.guild.channels.cache.find(ch => ch.name === `ticket-${message.author.username}`);
-        if (existingTicket) return message.reply(`⛔ You already have a ticket in ${existingTicket}`);
+        const ticketName = getNextTicketName();
+        ticketCounter++;
 
         const permissionOverwrites = [
           { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
           { id: message.author.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] } // ✅ bot always inside
+          { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
         ];
         STAFF_ROLE_IDS.forEach(r => {
           const role = message.guild.roles.cache.get(r);
           if (role) permissionOverwrites.push({ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
         });
-
-        const ticketName = getNextTicketName();
-        ticketCounter++;
 
         const ticketChannel = await message.guild.channels.create({
           name: ticketName,
@@ -98,7 +91,7 @@ client.on("messageCreate", async (message) => {
         });
 
         await ticketChannel.send(`👋 Hello <@${message.author.id}>. Please wait until a management member assists you.\n\n**Reason:** ${reason}`);
-        await message.reply(`✅ Ticket opened: ${ticketChannel}`);
+        await message.reply(`✅ Your ticket has been opened: ${ticketChannel}`);
       } catch (err) {
         console.error("Error creating ticket:", err);
         message.reply("❌ Failed to create ticket.");
@@ -108,17 +101,38 @@ client.on("messageCreate", async (message) => {
     // Close
     if (subCommand === "close") {
       const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-      if (!hasStaffRole) return message.reply("❌ You don’t have permission.");
+      if (!hasStaffRole) return message.reply("❌ You don’t have permission to close tickets.");
       if (message.channel.name.startsWith("ticket-") || message.channel.name.startsWith("🌸ticket-")) {
         try {
-          await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. Deleting in 3s...`);
+          // Fetch ALL messages
+          let allMessages = [];
+          let lastId;
+          while (true) {
+            const fetched = await message.channel.messages.fetch({ limit: 100, before: lastId });
+            if (fetched.size === 0) break;
+            allMessages = allMessages.concat(Array.from(fetched.values()));
+            lastId = fetched.last().id;
+          }
+          allMessages.reverse();
+
+          const logs = allMessages
+            .map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`)
+            .join("\n");
+
+          const logChannel = message.guild.channels.cache.find(ch => ch.name === "ticket-logs");
+          if (logChannel) {
+            const ticketNumber = message.channel.name.replace("🌸", "");
+            await logChannel.send(`**Ticket logs for ${ticketNumber}**\n\`\`\`\n${logs}\n\`\`\``);
+          }
+
+          await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
           setTimeout(() => message.channel.delete().catch(console.error), 3000);
         } catch (err) {
           console.error("Error closing ticket:", err);
-          message.reply("❌ Failed to close ticket.");
+          message.reply("❌ Failed to close the ticket.");
         }
       } else {
-        message.reply("⚠️ Use inside a ticket channel.");
+        message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
       }
     }
   }
@@ -126,7 +140,7 @@ client.on("messageCreate", async (message) => {
   // Mark management
   if (command === "!mark" && args[1] === "management") {
     if (!message.channel.name.startsWith("ticket-") && !message.channel.name.startsWith("🌸ticket-")) {
-      return message.reply("⚠️ Use inside a ticket channel.");
+      return message.reply("⚠️ You can only use this inside a ticket channel.");
     }
 
     const ticketCreator = message.guild.members.cache.get(
@@ -139,7 +153,7 @@ client.on("messageCreate", async (message) => {
     const permissionOverwrites = [
       { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
       { id: ticketCreator.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-      { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] } // ✅ bot stays inside
+      { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
     ];
 
     message.guild.roles.cache.forEach(role => {
@@ -151,13 +165,13 @@ client.on("messageCreate", async (message) => {
     const newName = message.channel.name.startsWith("🌸") ? message.channel.name : `🌸${message.channel.name}`;
     await message.channel.edit({
       name: newName,
-      topic: "Only management+ can view and handle this ticket",
+      topic: "🌸 Only management+ can view and handle this ticket",
       permissionOverwrites
     });
 
     const isManagement = MANAGEMENT_ROLE_IDS.some(r => message.member.roles.cache.has(r));
     if (isManagement) {
-      await message.channel.send("🌸 The ticket has been marked for management!");
+      await message.channel.send(`🌸 This ticket has been marked for management members!!\n\n<@${message.author.id}>`);
     } else {
       try {
         await message.author.send("🌸 The ticket has been successfully marked for management, Thank you for taking the right step!");
@@ -165,7 +179,13 @@ client.on("messageCreate", async (message) => {
         console.error("Failed to DM user:", err);
       }
     }
+
+    // Mark command also restricts the person who triggered it
+    if (!channelRestrictions.has(message.channel.id)) channelRestrictions.set(message.channel.id, new Set());
+    channelRestrictions.get(message.channel.id).add(message.author.id);
+    await message.channel.send(`⛔ <@${message.author.id}> is restricted from using any ticket commands inside this channel!!`);
   }
 });
 
 client.login(TOKEN);
+
