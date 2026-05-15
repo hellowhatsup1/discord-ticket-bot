@@ -80,10 +80,9 @@ client.on("messageCreate", async (message) => {
 
         const permissionOverwrites = [
           { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: message.author.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+          { id: message.author.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+          { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] } // ✅ bot always inside
         ];
-        const botMember = message.guild.members.cache.get(BOT_ID);
-        if (botMember) permissionOverwrites.push({ id: botMember.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
         STAFF_ROLE_IDS.forEach(r => {
           const role = message.guild.roles.cache.get(r);
           if (role) permissionOverwrites.push({ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
@@ -130,13 +129,19 @@ client.on("messageCreate", async (message) => {
       return message.reply("⚠️ Use inside a ticket channel.");
     }
 
-    const ticketCreator = message.guild.members.cache.get(message.channel.permissionOverwrites.cache.find(po => po.allow.has(PermissionsBitField.Flags.ViewChannel) && po.id !== message.guild.id)?.id);
+    const ticketCreator = message.guild.members.cache.get(
+      message.channel.permissionOverwrites.cache.find(po =>
+        po.allow.has(PermissionsBitField.Flags.ViewChannel) && po.id !== message.guild.id && po.id !== BOT_ID
+      )?.id
+    ) || message.member;
 
     const botRole = message.guild.members.me.roles.highest;
     const permissionOverwrites = [
       { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-      { id: ticketCreator ? ticketCreator.id : message.author.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+      { id: ticketCreator.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+      { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] } // ✅ bot stays inside
     ];
+
     message.guild.roles.cache.forEach(role => {
       if (role.position > botRole.position) {
         permissionOverwrites.push({ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
@@ -164,4 +169,3 @@ client.on("messageCreate", async (message) => {
 });
 
 client.login(TOKEN);
-
