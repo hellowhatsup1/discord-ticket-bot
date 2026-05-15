@@ -10,6 +10,19 @@ app.get("/", (req, res) => {
   res.send("Bot is alive!");
 });
 
+// Optional status endpoint
+app.get("/status", (req, res) => {
+  const botStatus = client.user 
+    ? `Logged in as ${client.user.tag}` 
+    : "Bot not logged in";
+
+  res.json({
+    status: "ok",
+    bot: botStatus,
+    uptime: process.uptime().toFixed(0) + "s"
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
@@ -24,103 +37,152 @@ const client = new Client({
 });
 
 // 🔧 CONFIGURATION
-const TOKEN = process.env.DISCORD_TOKEN; // ✅ pulled from Render env vars
-const BOT_ID = process.env.BOT_ID;       // optional: set your bot’s user ID in env
-const STAFF_ROLE_IDS = (process.env.STAFF_ROLE_IDS || "").split(","); 
-// e.g. STAFF_ROLE_IDS=1234567890,9876543210
+const TOKEN = process.env.DISCORD_TOKEN;
+const BOT_ID = process.env.BOT_ID;
+const STAFF_ROLE_IDS = (process.env.STAFF_ROLE_IDS || "").split(",");
+
+// Map of channelId -> Set of restricted user IDs
+const channelRestrictions = new Map();
 
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
 client.on("messageCreate", async (message) => {
-  if (!message.content.startsWith("!ticket") || message.author.bot) return;
+  if (message.author.bot) return;
+  if (!message.content.startsWith("!")) return;
 
   const args = message.content.trim().split(/\s+/);
-  const command = args[1];
-  const reason = args.slice(2).join(" ") || "No reason provided";
+  const command = args[0].toLowerCase();
 
-  // --- OPEN TICKET ---
-  if (command === "open") {
-    try {
-      const existingTicket = message.guild.channels.cache.find(
-        ch => ch.name === `ticket-${message.author.username}`
-      );
-
-      if (existingTicket) {
-        return message.reply(`⛔ You already have a ticket in ${existingTicket}`);
-      }
-
-      const permissionOverwrites = [
-        {
-          id: message.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel],
-        },
-        {
-          id: message.author.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-        }
-      ];
-
-      // Add bot itself
-      const botMember = message.guild.members.cache.get(BOT_ID);
-      if (botMember) {
-        permissionOverwrites.push({
-          id: botMember.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-        });
-      }
-
-      // Add staff roles
-      STAFF_ROLE_IDS.forEach(roleId => {
-        const role = message.guild.roles.cache.get(roleId);
-        if (role) {
-          permissionOverwrites.push({
-            id: role.id,
-            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-          });
-        }
-      });
-
-      const ticketChannel = await message.guild.channels.create({
-        name: `ticket-${message.author.username}`,
-        type: ChannelType.GuildText,
-        permissionOverwrites: permissionOverwrites,
-      });
-
-      await ticketChannel.send(
-        `👋 Hello <@${message.author.id}>. Please wait until a management member comes to assist you.\n\n**Reason:** ${reason}`
-      );
-
-      await message.reply(`✅ Your ticket has been opened: ${ticketChannel}`);
-    } catch (err) {
-      console.error("Error creating ticket:", err);
-      message.reply("❌ Failed to create ticket channel.");
-    }
-  }
-
-  // --- CLOSE TICKET ---
-  if (command === "close") {
+  // --- Restrict Command ---
+  if (command === "!restrict") {
     const hasStaffRole = STAFF_ROLE_IDS.some(roleId =>
       message.member.roles.cache.has(roleId)
     );
+    if (!hasStaffRole) return message.reply("❌ You don’t have permission to restrict users.");
 
-    if (!hasStaffRole) {
-      return message.reply("❌ You don’t have permission to close tickets.");
+    const target = message.mentions.users.first();
+    if (!target) return message.reply("⚠️ Please mention a user to restrict.");
+
+    if (!channelRestrictions.has(message.channel.id)) {
+      channelRestrictions.set(message.channel.id, new Set());
+    }
+    channelRestrictions.get(message.channel.id).add(target.id);
+
+    return message.reply(`⛔ ${target.tag} is now restricted from ticket commands in this channel.`);
+  }
+
+  // --- Unrestrict Command ---
+  if (command === "!unrestrict") {
+    const hasStaffRole = STAFF_ROLE_IDS.some(roleId =>
+      message.member.roles.cache.has(roleId)
+    );
+    if (!hasStaffRole) return message.reply("❌ You don’t have permission to unrestrict users.");
+
+    const target = message.mentions.users.first();
+    if (!target) return message.reply("⚠️ Please mention a user to unrestrict.");
+
+    if (channelRestrictions.has(message.channel.id)) {
+      channelRestrictions.get(message.channel.id).delete(target.id);
     }
 
-    if (message.channel.name.startsWith("ticket-")) {
+    return message.reply(`✅ ${target.tag} is no longer restricted in this channel.`);
+  }
+
+  // --- Block restricted users from ticket commands ---
+  if (command.startsWith("!ticket")) {
+    if (channelRestrictions.has(message.channel.id) &&
+        channelRestrictions.get(message.channel.id).has(message.author.id)) {
+      return message.reply("⛔ You are restricted from using ticket commands in this channel.");
+    }
+  }
+
+  // --- Ticket Commands ---
+  if (command === "!ticket") {
+    const subCommand = args[1];
+    const reason = args.slice(2).join(" ") || "No reason provided";
+
+    // --- OPEN TICKET ---
+    if (subCommand === "open") {
       try {
-        await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
-        setTimeout(() => {
-          message.channel.delete().catch(console.error);
-        }, 3000);
+        const existingTicket = message.guild.channels.cache.find(
+          ch => ch.name === `ticket-${message.author.username}`
+        );
+
+        if (existingTicket) {
+          return message.reply(`⛔ You already have a ticket in ${existingTicket}`);
+        }
+
+        const permissionOverwrites = [
+          {
+            id: message.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel],
+          },
+          {
+            id: message.author.id,
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+          }
+        ];
+
+        const botMember = message.guild.members.cache.get(BOT_ID);
+        if (botMember) {
+          permissionOverwrites.push({
+            id: botMember.id,
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+          });
+        }
+
+        STAFF_ROLE_IDS.forEach(roleId => {
+          const role = message.guild.roles.cache.get(roleId);
+          if (role) {
+            permissionOverwrites.push({
+              id: role.id,
+              allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+            });
+          }
+        });
+
+        const ticketChannel = await message.guild.channels.create({
+          name: `ticket-${message.author.username}`,
+          type: ChannelType.GuildText,
+          permissionOverwrites: permissionOverwrites,
+        });
+
+        await ticketChannel.send(
+          `👋 Hello <@${message.author.id}>. Please wait until a management member comes to assist you.\n\n**Reason:** ${reason}`
+        );
+
+        await message.reply(`✅ Your ticket has been opened: ${ticketChannel}`);
       } catch (err) {
-        console.error("Error closing ticket:", err);
-        message.reply("❌ Failed to close the ticket.");
+        console.error("Error creating ticket:", err);
+        message.reply("❌ Failed to create ticket channel.");
       }
-    } else {
-      message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
+    }
+
+    // --- CLOSE TICKET ---
+    if (subCommand === "close") {
+      const hasStaffRole = STAFF_ROLE_IDS.some(roleId =>
+        message.member.roles.cache.has(roleId)
+      );
+
+      if (!hasStaffRole) {
+        return message.reply("❌ You don’t have permission to close tickets.");
+      }
+
+      if (message.channel.name.startsWith("ticket-")) {
+        try {
+          await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
+          setTimeout(() => {
+            message.channel.delete().catch(console.error);
+          }, 3000);
+        } catch (err) {
+          console.error("Error closing ticket:", err);
+          message.reply("❌ Failed to close the ticket.");
+        }
+      } else {
+        message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
+      }
     }
   }
 });
