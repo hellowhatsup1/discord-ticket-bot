@@ -98,57 +98,59 @@ client.on("messageCreate", async (message) => {
       }
     }
 
-   // Close
-if (subCommand === "close") {
-  const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-  if (!hasStaffRole) return message.reply("❌ You don’t have permission to close tickets.");
-  if (message.channel.name.startsWith("ticket-") || message.channel.name.startsWith("🌸ticket-")) {
-    try {
-      // Fetch ALL messages
-      let allMessages = [];
-      let lastId;
-      while (true) {
-        const fetched = await message.channel.messages.fetch({ limit: 100, before: lastId });
-        if (fetched.size === 0) break;
-        allMessages = allMessages.concat(Array.from(fetched.values()));
-        lastId = fetched.last().id;
-      }
-      allMessages.reverse();
+    // Close
+    if (subCommand === "close") {
+      const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
+      if (!hasStaffRole) return message.reply("❌ You don’t have permission to close tickets.");
+      if (message.channel.name.startsWith("ticket-") || message.channel.name.startsWith("🌸ticket-")) {
+        try {
+          // Fetch ALL messages
+          let allMessages = [];
+          let lastId;
+          while (true) {
+            const fetched = await message.channel.messages.fetch({ limit: 100, before: lastId });
+            if (fetched.size === 0) break;
+            allMessages = allMessages.concat(Array.from(fetched.values()));
+            lastId = fetched.last().id;
+          }
+          allMessages.reverse();
 
-      const logs = allMessages
-        .map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`)
-        .join("\n");
+          const logs = allMessages
+            .map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`)
+            .join("\n");
 
-      const logChannel = message.guild.channels.cache.find(ch => ch.name === "ticket-logs");
-      if (logChannel) {
-        const ticketNumber = message.channel.name.replace("🌸", "");
-        await logChannel.send(`**Ticket logs for ${ticketNumber}**`);
+          const logChannel = message.guild.channels.cache.find(ch => ch.name === "ticket-logs");
+          if (logChannel) {
+            const ticketNumber = message.channel.name.replace("🌸", "");
+            await logChannel.send(`**Ticket logs for ${ticketNumber}**`);
 
-        // Split into chunks under 2000 chars
-        const chunks = logs.match(/[\s\S]{1,1900}/g) || [];
-        for (const chunk of chunks) {
-          await logChannel.send(`\`\`\`\n${chunk}\n\`\`\``);
+            // Split into chunks under 2000 chars
+            const chunks = logs.match(/[\s\S]{1,1900}/g) || [];
+            for (const chunk of chunks) {
+              await logChannel.send(`\`\`\`\n${chunk}\n\`\`\``);
+            }
+          }
+
+          await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
+
+          // ✅ safer delete using channelId re-fetch
+          const channelId = message.channel.id;
+          setTimeout(() => {
+            const ch = message.guild.channels.cache.get(channelId);
+            if (ch) {
+              ch.delete().catch(console.error);
+            }
+          }, 3000);
+
+        } catch (err) {
+          console.error("Error closing ticket:", err);
+          message.reply("❌ Failed to close the ticket. Check bot permissions and message size.");
         }
+      } else {
+        message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
       }
-
-      await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
-
-      // ✅ safer delete using channelId re-fetch
-      const channelId = message.channel.id;
-      setTimeout(() => {
-        const ch = message.guild.channels.cache.get(channelId);
-        if (ch) ch.delete().catch(console.error);
-      }, 3000);
-
-    } catch (err) {
-      console.error("Error closing ticket:", err);
-      message.reply("❌ Failed to close the ticket. Check bot permissions and message size.");
     }
-  } else {
-    message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
   }
-}
-
     // Mark management
   if (command === "!mark" && args[1] === "management") {
     // Restriction check first
