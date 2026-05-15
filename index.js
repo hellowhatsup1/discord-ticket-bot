@@ -142,7 +142,7 @@ client.on("messageCreate", async (message) => {
       }
     }
   }
-  // Mark management
+    // Mark management
   if (command === "!mark" && args[1] === "management") {
     // Restriction check first
     if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
@@ -189,11 +189,6 @@ client.on("messageCreate", async (message) => {
         console.error("Failed to DM user:", err);
       }
     }
-
-    // Mark command also restricts the person who triggered it
-    if (!channelRestrictions.has(message.channel.id)) channelRestrictions.set(message.channel.id, new Set());
-    channelRestrictions.get(message.channel.id).add(message.author.id);
-    await message.channel.send(`⛔ <@${message.author.id}> is restricted from using any ticket commands inside this channel!!`);
   }
 });
 
