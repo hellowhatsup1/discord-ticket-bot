@@ -164,6 +164,11 @@ client.on("messageCreate", async (message) => {
       return message.reply("⚠️ You can only use this inside a ticket channel.");
     }
 
+    // ✅ Prevent double-mark
+    if (message.channel.name.startsWith("🌸")) {
+      return message.reply("⚠️ The ticket has already been marked for management!");
+    }
+
     const ticketCreator = message.guild.members.cache.get(
       message.channel.permissionOverwrites.cache.find(po =>
         po.allow.has(PermissionsBitField.Flags.ViewChannel) && po.id !== message.guild.id && po.id !== BOT_ID
@@ -183,25 +188,21 @@ client.on("messageCreate", async (message) => {
       }
     });
 
-    const newName = message.channel.name.startsWith("🌸") ? message.channel.name : `🌸${message.channel.name}`;
+    const newName = `🌸${message.channel.name}`;
     await message.channel.edit({
       name: newName,
       topic: "🌸 Only management+ can view and handle this ticket",
       permissionOverwrites
     });
 
-    const isManagement = MANAGEMENT_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-    if (isManagement) {
-      await message.channel.send(`🌸 This ticket has been marked for management members!!\n\n<@${message.author.id}>`);
-    } else {
-      try {
-        await message.author.send("🌸 The ticket has been successfully marked for management, Thank you for taking the right step!");
-      } catch (err) {
-        console.error("Failed to DM user:", err);
-      }
+    // ✅ Always mention + DM
+    await message.channel.send(`🌸 This ticket has been marked for management members!!\n\n<@${message.author.id}>`);
+    try {
+      await message.author.send("🌸 The ticket has been successfully marked for management, Thank you for taking the right step!");
+    } catch (err) {
+      console.error("Failed to DM user:", err);
     }
   }
 });
 
 client.login(TOKEN);
-
