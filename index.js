@@ -40,6 +40,13 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const BOT_ID = process.env.BOT_ID;
 const STAFF_ROLE_IDS = (process.env.STAFF_ROLE_IDS || "").split(",");
 
+// Management roles (hardcoded from your IDs)
+const MANAGEMENT_ROLE_IDS = [
+  "1455891106926559253",
+  "1455891204297195551",
+  "1455946597400838287"
+];
+
 // Map of channelId -> Set of restricted user IDs
 const channelRestrictions = new Map();
 
@@ -174,7 +181,7 @@ client.on("messageCreate", async (message) => {
         return message.reply("❌ You don’t have permission to close tickets.");
       }
 
-      if (message.channel.name.startsWith("ticket-")) {
+      if (message.channel.name.startsWith("ticket-") || message.channel.name.startsWith("🌸ticket-")) {
         try {
           await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
           setTimeout(() => {
@@ -189,7 +196,63 @@ client.on("messageCreate", async (message) => {
       }
     }
   }
+
+  // --- MARK MANAGEMENT COMMAND ---
+  if (command === "!mark" && args[1] === "management") {
+    if (!message.channel.name.startsWith("ticket-") && !message.channel.name.startsWith("🌸ticket-")) {
+      return message.reply("⚠️ You can only use this command inside a ticket channel.");
+    }
+
+    // Find ticket creator (based on channel name)
+    const ticketCreatorName = message.channel.name.replace("ticket-", "").replace("🌸ticket-", "");
+    const ticketCreator = message.guild.members.cache.find(m => m.user.username === ticketCreatorName);
+
+    // Build new permission overwrites
+    const permissionOverwrites = [
+      {
+        id: message.guild.id,
+        deny: [PermissionsBitField.Flags.ViewChannel],
+      },
+      {
+        id: ticketCreator ? ticketCreator.id : message.author.id,
+        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+      }
+    ];
+
+    MANAGEMENT_ROLE_IDS.forEach(roleId => {
+      const role = message.guild.roles.cache.get(roleId);
+      if (role) {
+        permissionOverwrites.push({
+          id: role.id,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+        });
+      }
+    });
+
+    await message.channel.edit({
+      name: `🌸ticket-${ticketCreator ? ticketCreator.user.username : message.author.username}`,
+      permissionOverwrites: permissionOverwrites
+    });
+
+    await message.channel.send("🔒 Only management members can see and chat in this ticket.");
+
+    // Check if the person is in management
+    const isManagement = MANAGEMENT_ROLE_IDS.some(roleId =>
+      message.member.roles.cache.has(roleId)
+    );
+
+    if (isManagement) {
+      await message.channel.send("🌸 The ticket has been marked for management!");
+    } else {
+      try {
+        await message.author.send("🌸 The ticket has been successfully marked for management, Thank you for taking the right step!");
+      } catch (err) {
+        console.error("Failed to DM user:", err);
+      }
+    }
+  }
 });
 
 client.login(TOKEN);
+
 
