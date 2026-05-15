@@ -153,9 +153,15 @@ client.on("messageCreate", async (message) => {
       }
     }
   }
-   // Mark management
+    // Mark management
   if (command === "!mark" && args[1] === "management") {
-    // Restriction check first
+    // ✅ Only staff can run this
+    const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
+    if (!hasStaffRole) {
+      return message.reply("❌ You don’t have permission to mark tickets for management.");
+    }
+
+    // Restriction check
     if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
       return message.reply("⛔ You are restricted from using ticket commands in this channel!!");
     }
@@ -164,7 +170,7 @@ client.on("messageCreate", async (message) => {
       return message.reply("⚠️ You can only use this inside a ticket channel.");
     }
 
-    // ✅ Prevent double-mark
+    // Prevent double-mark
     if (message.channel.name.startsWith("🌸")) {
       return message.reply("⚠️ The ticket has already been marked for management!");
     }
@@ -196,7 +202,7 @@ client.on("messageCreate", async (message) => {
       permissionOverwrites
     });
 
-    // ✅ Always mention + DM
+    // Always mention + DM
     await message.channel.send(`🌸 This ticket has been marked for management members!!\n\n<@${message.author.id}>`);
     try {
       await message.author.send("🌸 The ticket has been successfully marked for management, Thank you for taking the right step!");
@@ -204,7 +210,7 @@ client.on("messageCreate", async (message) => {
       console.error("Failed to DM user:", err);
     }
 
-    // ✅ If user is NOT management, remove their access
+    // If user is NOT management, remove their access
     const isManagement = MANAGEMENT_ROLE_IDS.some(r => message.member.roles.cache.has(r));
     if (!isManagement) {
       await message.channel.permissionOverwrites.edit(message.author.id, {
@@ -214,7 +220,5 @@ client.on("messageCreate", async (message) => {
     }
   }
 });
-
-client.login(TOKEN);
 
 client.login(TOKEN);
