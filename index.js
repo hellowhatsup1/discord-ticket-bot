@@ -10,7 +10,6 @@ app.get("/", (req, res) => {
   res.send("Bot is alive!");
 });
 
-// Optional status endpoint
 app.get("/status", (req, res) => {
   const botStatus = client.user 
     ? `Logged in as ${client.user.tag}` 
@@ -82,6 +81,11 @@ client.on("messageCreate", async (message) => {
 
     const target = message.mentions.users.first();
     if (!target) return message.reply("⚠️ Please mention a user to unrestrict.");
+
+    // Prevent self-unrestrict
+    if (target.id === message.author.id) {
+      return message.reply("⛔ You cannot unrestrict yourself. Another staff member must do it.");
+    }
 
     if (channelRestrictions.has(message.channel.id)) {
       channelRestrictions.get(message.channel.id).delete(target.id);
