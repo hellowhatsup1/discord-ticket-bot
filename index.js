@@ -22,9 +22,11 @@ const MANAGEMENT_ROLE_IDS = [
 ];
 
 const channelRestrictions = new Map();
+
+// ✅ Infinite counter — always increments
 let ticketCounter = 1;
 function getNextTicketName() {
-  return `ticket-${String(ticketCounter).padStart(3, "0")}`;
+  return `ticket-${String(ticketCounter).padStart(2, "0")}`;
 }
 
 client.once("ready", () => console.log(`✅ Logged in as ${client.user.tag}`));
@@ -72,7 +74,7 @@ client.on("messageCreate", async (message) => {
     if (subCommand === "open") {
       try {
         const ticketName = getNextTicketName();
-        ticketCounter++;
+        ticketCounter++; // ✅ always increment, independent of open/closed
 
         const permissionOverwrites = [
           { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -98,7 +100,7 @@ client.on("messageCreate", async (message) => {
       }
     }
 
-    // Close
+    // Close (with safe delete + logging)
     if (subCommand === "close") {
       const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
       if (!hasStaffRole) return message.reply("❌ You don’t have permission to close tickets.");
@@ -151,7 +153,7 @@ client.on("messageCreate", async (message) => {
       }
     }
   }
-    // Mark management
+  // Mark management
   if (command === "!mark" && args[1] === "management") {
     // Restriction check first
     if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
@@ -202,3 +204,4 @@ client.on("messageCreate", async (message) => {
 });
 
 client.login(TOKEN);
+
