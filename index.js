@@ -224,10 +224,10 @@ client.once("ready", () => {
     daysPassed = 0;
     reminderChannel.send(`<@${reminderUserId}>\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
 
-    // Schedule reminders every 1 minute (for testing)
+    // Schedule reminders every 24 hours 
     setInterval(() => {
       if (reminderActive) sendReminder();
-    }, 60 * 1000); // 1 minute
+    }, 24 * 60 * 60 * 1000); // 24 hours
   }
 });
 
