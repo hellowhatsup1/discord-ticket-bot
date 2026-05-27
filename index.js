@@ -106,7 +106,7 @@ client.on("messageCreate", async (message) => {
 });
 
 // 🔔 Reminder Ranking Bot logic
-const reminderUser = "manku"; // only Manku
+const reminderUserId = "1275470804284608618"; // your ID
 let daysPassed = 0;
 let reminderActive = false;
 let reminderChannel;
@@ -117,9 +117,9 @@ function sendReminder() {
 
   let message;
   if (daysPassed === 1) {
-    message = `@Manku\nIt's been 1 day. Please reset the timer for ranking bot, Thank you!!\nIf you did, please respond with ok.`;
+    message = `<@${reminderUserId}>\nIt's been 1 day. Please reset the timer for ranking bot, Thank you!!\nIf you did, please respond with ok.`;
   } else {
-    message = `@Manku\nIt's been ${daysPassed} days!! Please reset the timer for ranking bot, Quickly asap!!`;
+    message = `<@${reminderUserId}>\nIt's been ${daysPassed} days!! Please reset the timer for ranking bot, Quickly asap!!`;
   }
 
   reminderChannel.send(message);
@@ -127,7 +127,7 @@ function sendReminder() {
 
 client.on("messageCreate", (msg) => {
   if (!reminderActive) return;
-  if (msg.author.username.toLowerCase() === reminderUser && msg.content.toLowerCase() === "ok") {
+  if (msg.author.id === reminderUserId && msg.content.toLowerCase() === "ok") {
     daysPassed = 0;
     reminderActive = false;
     msg.channel.send(`Alright! Good job! I will keep on reminding you guys :)`);
@@ -139,7 +139,7 @@ client.once("ready", () => {
   if (reminderChannel) {
     reminderActive = true;
     daysPassed = 0;
-    reminderChannel.send(`@Manku\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
+    reminderChannel.send(`<@${reminderUserId}>\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
 
     setInterval(() => {
       if (reminderActive) sendReminder();
