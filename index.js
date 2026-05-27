@@ -212,6 +212,8 @@ client.on("messageCreate", (msg) => {
     daysPassed = 0;
     reminderActive = false;
     msg.channel.send(`Alright! Good job! I will keep on reminding you guys :)`);
+    // Restart reminder cycle after reset
+    reminderActive = true;
   }
 });
 
@@ -222,11 +224,13 @@ client.once("ready", () => {
     daysPassed = 0;
     reminderChannel.send(`<@${reminderUserId}>\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
 
+    // Schedule reminders every 1 minute (for testing)
     setInterval(() => {
       if (reminderActive) sendReminder();
-    }, 24 * 60 * 60 * 1000); // every 24h
+    }, 60 * 1000); // 1 minute
   }
 });
+
 
 client.login(TOKEN);
 
