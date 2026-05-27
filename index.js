@@ -9,7 +9,11 @@ app.get("/", (req, res) => res.send("Bot is alive!"));
 app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -64,7 +68,6 @@ client.on("messageCreate", async (message) => {
       return message.reply("⛔ You are restricted from using ticket commands in this channel!!");
     }
   }
-
   // Ticket commands
   if (command === "!ticket") {
     const subCommand = args[1];
@@ -74,7 +77,7 @@ client.on("messageCreate", async (message) => {
     if (subCommand === "open") {
       try {
         const ticketName = getNextTicketName();
-        ticketCounter++; // ✅ always increment, independent of open/closed
+        ticketCounter++;
 
         const permissionOverwrites = [
           { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -99,126 +102,50 @@ client.on("messageCreate", async (message) => {
         message.reply("❌ Failed to create ticket.");
       }
     }
-
-    // Close (with safe delete + logging)
-    if (subCommand === "close") {
-      const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-      if (!hasStaffRole) return message.reply("❌ You don’t have permission to close tickets.");
-      if (message.channel.name.startsWith("ticket-") || message.channel.name.startsWith("🌸ticket-")) {
-        try {
-          // Fetch ALL messages
-          let allMessages = [];
-          let lastId;
-          while (true) {
-            const fetched = await message.channel.messages.fetch({ limit: 100, before: lastId });
-            if (fetched.size === 0) break;
-            allMessages = allMessages.concat(Array.from(fetched.values()));
-            lastId = fetched.last().id;
-          }
-          allMessages.reverse();
-
-          const logs = allMessages
-            .map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`)
-            .join("\n");
-
-          const logChannel = message.guild.channels.cache.find(ch => ch.name === "ticket-logs");
-          if (logChannel) {
-            const ticketNumber = message.channel.name.replace("🌸", "");
-            await logChannel.send(`**Ticket logs for ${ticketNumber}**`);
-
-            // Split into chunks under 2000 chars
-            const chunks = logs.match(/[\s\S]{1,1900}/g) || [];
-            for (const chunk of chunks) {
-              await logChannel.send(`\`\`\`\n${chunk}\n\`\`\``);
-            }
-          }
-
-          await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
-
-          // ✅ safer delete using channelId re-fetch
-          const channelId = message.channel.id;
-          setTimeout(() => {
-            const ch = message.guild.channels.cache.get(channelId);
-            if (ch) {
-              ch.delete().catch(console.error);
-            }
-          }, 3000);
-
-        } catch (err) {
-          console.error("Error closing ticket:", err);
-          message.reply("❌ Failed to close the ticket. Check bot permissions and message size.");
-        }
-      } else {
-        message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
-      }
-    }
   }
-    // Mark management
-  if (command === "!mark" && args[1] === "management") {
-    // ✅ Only staff can run this
-    const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-    if (!hasStaffRole) {
-      return message.reply("❌ You don’t have permission to mark tickets for management.");
-    }
+});
 
-    // Restriction check
-    if (channelRestrictions.has(message.channel.id) && channelRestrictions.get(message.channel.id).has(message.author.id)) {
-      return message.reply("⛔ You are restricted from using ticket commands in this channel!!");
-    }
+// 🔔 Reminder Ranking Bot logic
+const reminderUser = "manku"; // only Manku
+let daysPassed = 0;
+let reminderActive = false;
+let reminderChannel;
 
-    if (!message.channel.name.startsWith("ticket-") && !message.channel.name.startsWith("🌸ticket-")) {
-      return message.reply("⚠️ You can only use this inside a ticket channel.");
-    }
+function sendReminder() {
+  if (!reminderChannel) return;
+  daysPassed++;
 
-    // Prevent double-mark
-    if (message.channel.name.startsWith("🌸")) {
-      return message.reply("⚠️ The ticket has already been marked for management!");
-    }
+  let message;
+  if (daysPassed === 1) {
+    message = `@Manku\nIt's been 1 day. Please reset the timer for ranking bot, Thank you!!\nIf you did, please respond with ok.`;
+  } else {
+    message = `@Manku\nIt's been ${daysPassed} days!! Please reset the timer for ranking bot, Quickly asap!!`;
+  }
 
-    const ticketCreator = message.guild.members.cache.get(
-      message.channel.permissionOverwrites.cache.find(po =>
-        po.allow.has(PermissionsBitField.Flags.ViewChannel) && po.id !== message.guild.id && po.id !== BOT_ID
-      )?.id
-    ) || message.member;
+  reminderChannel.send(message);
+}
 
-    const botRole = message.guild.members.me.roles.highest;
-    const permissionOverwrites = [
-      { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-      { id: ticketCreator.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-      { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-    ];
+client.on("messageCreate", (msg) => {
+  if (!reminderActive) return;
+  if (msg.author.username.toLowerCase() === reminderUser && msg.content.toLowerCase() === "ok") {
+    daysPassed = 0;
+    reminderActive = false;
+    msg.channel.send(`Alright! Good job! I will keep on reminding you guys :)`);
+  }
+});
 
-    // Allow only management roles above bot
-    message.guild.roles.cache.forEach(role => {
-      if (role.position > botRole.position) {
-        permissionOverwrites.push({ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
-      }
-    });
+client.once("ready", () => {
+  reminderChannel = client.channels.cache.find(ch => ch.name === "reminder-ranking-bot");
+  if (reminderChannel) {
+    reminderActive = true;
+    daysPassed = 0;
+    reminderChannel.send(`@Manku\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
 
-    const newName = `🌸${message.channel.name}`;
-    await message.channel.edit({
-      name: newName,
-      topic: "🌸 Only management+ can view and handle this ticket",
-      permissionOverwrites
-    });
-
-    // Always mention + DM
-    await message.channel.send(`🌸 This ticket has been marked for management members!!\n\n<@${message.author.id}>`);
-    try {
-      await message.author.send("🌸 The ticket has been successfully marked for management, Thank you for taking the right step!");
-    } catch (err) {
-      console.error("Failed to DM user:", err);
-    }
-
-    // If user is NOT management, remove their access
-    const isManagement = MANAGEMENT_ROLE_IDS.some(r => message.member.roles.cache.has(r));
-    if (!isManagement) {
-      await message.channel.permissionOverwrites.edit(message.author.id, {
-        ViewChannel: false,
-        SendMessages: false
-      });
-    }
+    setInterval(() => {
+      if (reminderActive) sendReminder();
+    }, 24 * 60 * 60 * 1000); // every 24h
   }
 });
 
 client.login(TOKEN);
+
