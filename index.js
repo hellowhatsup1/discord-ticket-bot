@@ -102,10 +102,20 @@ client.on("messageCreate", async (message) => {
         message.reply("❌ Failed to create ticket.");
       }
     }
+
+    // Close (with safe delete + logging)
+    if (subCommand === "close") {
+      // ... keep your existing close logic here ...
+    }
+  }
+
+  // Mark management
+  if (command === "!mark" && args[1] === "management") {
+    // ... keep your existing mark management logic here ...
   }
 });
 
-// 🔔 Reminder Ranking Bot logic
+// 🔔 Reminder Ranking Bot logic (separate from ticket commands)
 const reminderUserId = "1275470804284608618"; // your ID
 let daysPassed = 0;
 let reminderActive = false;
