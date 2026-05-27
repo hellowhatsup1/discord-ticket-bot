@@ -105,17 +105,90 @@ client.on("messageCreate", async (message) => {
 
     // Close (with safe delete + logging)
     if (subCommand === "close") {
-      // ... keep your existing close logic here ...
+      const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
+      if (!hasStaffRole) return message.reply("❌ You don’t have permission to close tickets.");
+      if (message.channel.name.startsWith("ticket-") || message.channel.name.startsWith("🌸ticket-")) {
+        try {
+          let allMessages = [];
+          let lastId;
+          while (true) {
+            const fetched = await message.channel.messages.fetch({ limit: 100, before: lastId });
+            if (fetched.size === 0) break;
+            allMessages = allMessages.concat(Array.from(fetched.values()));
+            lastId = fetched.last().id;
+          }
+          allMessages.reverse();
+
+          const logs = allMessages
+            .map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`)
+            .join("\n");
+
+          const logChannel = message.guild.channels.cache.find(ch => ch.name === "ticket-logs");
+          if (logChannel) {
+            const ticketNumber = message.channel.name.replace("🌸", "");
+            await logChannel.send(`**Ticket logs for ${ticketNumber}**`);
+            const chunks = logs.match(/[\s\S]{1,1900}/g) || [];
+            for (const chunk of chunks) {
+              await logChannel.send(`\`\`\`\n${chunk}\n\`\`\``);
+            }
+          }
+
+          await message.channel.send(`✅ Ticket closed by <@${message.author.id}>. This channel will be deleted in 3 seconds...`);
+          const channelId = message.channel.id;
+          setTimeout(() => {
+            const ch = message.guild.channels.cache.get(channelId);
+            if (ch) ch.delete().catch(console.error);
+          }, 3000);
+
+        } catch (err) {
+          console.error("Error closing ticket:", err);
+          message.reply("❌ Failed to close the ticket. Check bot permissions and message size.");
+        }
+      } else {
+        message.reply("⚠️ You can only use `!ticket close` inside a ticket channel.");
+      }
     }
   }
 
   // Mark management
   if (command === "!mark" && args[1] === "management") {
-    // ... keep your existing mark management logic here ...
+    const hasStaffRole = STAFF_ROLE_IDS.some(r => message.member.roles.cache.has(r));
+    if (!hasStaffRole) return message.reply("❌ You don’t have permission to mark tickets for management.");
+    if (!message.channel.name.startsWith("ticket-") && !message.channel.name.startsWith("🌸ticket-")) {
+      return message.reply("⚠️ You can only use this inside a ticket channel.");
+    }
+    if (message.channel.name.startsWith("🌸")) {
+      return message.reply("⚠️ The ticket has already been marked for management!");
+    }
+
+    const botRole = message.guild.members.me.roles.highest;
+    const permissionOverwrites = [
+      { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      { id: BOT_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+    ];
+    message.guild.roles.cache.forEach(role => {
+      if (role.position > botRole.position) {
+        permissionOverwrites.push({ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] });
+      }
+    });
+
+    const newName = `🌸${message.channel.name}`;
+    await message.channel.edit({
+      name: newName,
+      topic: "🌸 Only management+ can view and handle this ticket",
+      permissionOverwrites
+    });
+
+    await message.channel.send(`🌸 This ticket has been marked for management members!!\n\n<@${message.author.id}>`);
+    try {
+      await message.author.send("🌸 The ticket has been successfully marked for management, Thank you!");
+    } catch (err) {
+      console.error("Failed to DM user:", err);
+    }
   }
 });
 
-// 🔔 Reminder Ranking Bot logic (separate from ticket commands)
+// 🔔 Reminder Ranking Bot logic
 const reminderUserId = "1275470804284608618"; // your ID
 let daysPassed = 0;
 let reminderActive = false;
@@ -124,14 +197,12 @@ let reminderChannel;
 function sendReminder() {
   if (!reminderChannel) return;
   daysPassed++;
-
   let message;
   if (daysPassed === 1) {
     message = `<@${reminderUserId}>\nIt's been 1 day. Please reset the timer for ranking bot, Thank you!!\nIf you did, please respond with ok.`;
   } else {
     message = `<@${reminderUserId}>\nIt's been ${daysPassed} days!! Please reset the timer for ranking bot, Quickly asap!!`;
   }
-
   reminderChannel.send(message);
 }
 
