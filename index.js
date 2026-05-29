@@ -189,7 +189,7 @@ client.on("messageCreate", async (message) => {
 });
 
 // 🔔 Reminder Ranking Bot logic
-const reminderUserId = "1275470804284608618"; // your ID
+const reminderUserIds = ["1275470804284608618", "1281077799435898961"]; // you + friend
 let daysPassed = 0;
 let reminderActive = false;
 let reminderChannel;
@@ -197,23 +197,28 @@ let reminderChannel;
 function sendReminder() {
   if (!reminderChannel) return;
   daysPassed++;
+
+  // Build mention string for all users
+  const mentions = reminderUserIds.map(id => `<@${id}>`).join(" ");
+
   let message;
   if (daysPassed === 1) {
-    message = `<@${reminderUserId}>\nIt's been 1 day. Please reset the timer for ranking bot, Thank you!!\nIf you did, please respond with ok.`;
+    message = `${mentions}\nIt's been 1 day. Please reset the timer for ranking bot, Thank you!!\nIf you did, please respond with ok.`;
   } else {
-    message = `<@${reminderUserId}>\nIt's been ${daysPassed} days!! Please reset the timer for ranking bot, Quickly asap!!`;
+    message = `${mentions}\nIt's been ${daysPassed} days!! Please reset the timer for ranking bot, Quickly asap!!`;
   }
+
   reminderChannel.send(message);
 }
 
 client.on("messageCreate", (msg) => {
   if (!reminderActive) return;
-  if (msg.author.id === reminderUserId && msg.content.toLowerCase() === "ok") {
+  // Reset if any of the listed users says "ok"
+  if (reminderUserIds.includes(msg.author.id) && msg.content.toLowerCase() === "ok") {
     daysPassed = 0;
     reminderActive = false;
     msg.channel.send(`Alright! Good job! I will keep on reminding you guys :)`);
-    // Restart reminder cycle after reset
-    reminderActive = true;
+    reminderActive = true; // restart cycle
   }
 });
 
@@ -222,12 +227,14 @@ client.once("ready", () => {
   if (reminderChannel) {
     reminderActive = true;
     daysPassed = 0;
-    reminderChannel.send(`<@${reminderUserId}>\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
 
-    // Schedule reminders every 24 hours 
+    const mentions = reminderUserIds.map(id => `<@${id}>`).join(" ");
+    reminderChannel.send(`${mentions}\nBot deployed fresh! Please reset the timer for ranking bot.\nIf you did, please respond with ok.`);
+
+    // Schedule reminders every 24 hours (production)
     setInterval(() => {
       if (reminderActive) sendReminder();
-    }, 24 * 60 * 60 * 1000); // 24 hours
+    }, 24 * 60 * 60 * 1000); // 24h
   }
 });
 
