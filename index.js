@@ -222,7 +222,7 @@ client.on("messageCreate", (msg) => {
   }
 });
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   reminderChannel = client.channels.cache.find(ch => ch.name === "reminder-ranking-bot");
   if (reminderChannel) {
     reminderActive = true;
