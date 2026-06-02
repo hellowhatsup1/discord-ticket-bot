@@ -239,5 +239,15 @@ client.once("ready", () => {
 });
 
 
-client.login(TOKEN);
+// ✅ Extra error logging
+client.on("error", (err) => console.error("❌ Discord client error:", err));
+client.on("shardError", (err) => console.error("❌ Shard error:", err));
+client.on("disconnect", (event) => console.error("⚠️ Bot disconnected:", event));
+client.on("warn", (info) => console.warn("⚠️ Warning:", info));
+
+// 🔑 Login with catch
+client.login(TOKEN).catch(err => {
+  console.error("❌ Login failed! Check your DISCORD_TOKEN or intents:", err);
+});
+
 
